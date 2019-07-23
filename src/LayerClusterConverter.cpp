@@ -8,6 +8,8 @@
 #include <stdexcept>
 #include "../interface/LayerClusterConverter.h"
 #include "Math/Vector3D.h"
+#include <algorithm>
+#include <math.h>
 
 class distribution_xy{
 public:
@@ -62,7 +64,16 @@ private:
 };
 
 
+float euclidean_distance(float x, float y, float z,
+        float x1, float y1, float z1){
 
+    float dx = x-x1;
+    float dy = y-y1;
+    float dz = z-z1;
+
+    return sqrt(dx*dx+dy*dy+dz*dz);
+
+}
 
 std::vector<float>  LayerClusterConverter::createLayerClusterFeatures(const int lc_index)const{
     if(init_<3)
@@ -91,9 +102,44 @@ std::vector<float> LayerClusterConverter::createLayerClusterTruth(const int lc_i
     if(init_<3)
             throw std::logic_error("LayerClusterConverter::createLayerClusterTruth: first set all: rechits, simclusterconv, layer clusters exactly once per event");
 
-
     return calculateTruthDistributions(lc_rechits_->at(lc_index));
 
+}
+
+std::vector<int> LayerClusterConverter::getUniqueClusters()const{
+    //check for position and energy, select the ones with rechits asso
+    std::vector<int> with_rh;
+
+    for(size_t i=0;i<lc_energy_->size();i++){
+        if(lc_rechits_->at(i).size()<1) continue;
+        with_rh.push_back(i);
+    }
+    //another check iteration
+    int nmatched=0;
+    for(size_t i=0;i<lc_energy_->size();i++){
+        if(std::find(with_rh.begin(), with_rh.end(), i) != with_rh.end())continue;
+
+        const auto& i_x = lc_x_   ->at(i);
+        const auto& i_y = lc_y_   ->at(i);
+        const auto& i_z = lc_z_   ->at(i);
+        const auto& i_e = lc_energy_   ->at(i);
+
+        //see if a match can be found
+        for(size_t j=0;j<with_rh.size();j++){
+            const auto& j_x = lc_x_   ->at(with_rh.at(j));
+            const auto& j_y = lc_y_   ->at(with_rh.at(j));
+            const auto& j_z = lc_z_   ->at(with_rh.at(j));
+            const auto& j_e = lc_energy_   ->at(with_rh.at(j));
+
+            if(euclidean_distance(i_x,i_y,i_z,j_x,j_y,j_z) < 0.001 && fabs(j_e-i_e) < 0.001){
+                nmatched++;
+            }
+        }
+    }
+
+    //std::cout << "all " << lc_energy_->size() << ", with rh:  "<< with_rh.size() << ", matched " <<  nmatched << ", difference " << lc_energy_->size()-with_rh.size()-nmatched<< std::endl;
+
+    return with_rh;
 }
 
 void LayerClusterConverter::setRechits(
@@ -172,18 +218,26 @@ std::vector<float> LayerClusterConverter::calculateTruthDistributions(
 
     const int nsim = simconv_->numSimclusters();
 
-    std::vector<distribution_xy> mean_simfracs(nsim);
+    std::vector<float> mean_simfracs(nsim);
+    float energysum=0;
 
     for(const auto& i: rh_indices){
-        auto fracs = simconv_->getClusterIdxAndFracForHit(i).second;
-        for(int sc=0;sc<nsim;sc++){
-            mean_simfracs.at(sc).addXY(fracs.at(sc),0,rh_energy_->at(i));
+        auto sc_asso = simconv_->getClusterIdxAndFracForHit(i);
+        auto fracs = sc_asso.second;
+        auto scidx = sc_asso.first;
+        energysum+=rh_energy_->at(i);
+        for(const auto sc: scidx){
+            mean_simfracs.at(sc) += fracs.at(sc)*rh_energy_->at(i);
         }
     }
     std::vector<float> out;
+    if(!energysum)
+        std::cout << "no energy" << std::endl;
     for(int sc=0;sc<nsim;sc++){
-        mean_simfracs.at(sc).calculateMeanXYandReset();
-        out.push_back(mean_simfracs.at(sc).getMeanX());
+        if(!energysum)
+            out.push_back(0);
+        else
+            out.push_back(mean_simfracs.at(sc)/energysum);
     }
     return out;
 }

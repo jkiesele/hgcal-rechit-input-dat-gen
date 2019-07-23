@@ -62,6 +62,12 @@ public:
 
     std::vector<float>  createLayerClusterTruth(const int lc_index)const;
 
+    /**
+     * removes clusters that seem to share all hits (same energy and position),
+     * and keeps the one with rechits associated
+     */
+    std::vector<int> getUniqueClusters()const;
+
     //compat to RecHitConverter
 
     /*const*/ std::vector<float> * eta(){ return const_cast<std::vector<float> *>(lc_eta_); };//FIXME in WindowEtaPhi

@@ -149,9 +149,9 @@ void analyser::analyze(size_t childid /* this info can be used for printouts */)
 		        rechit_z.content(),rechit_time.content(),rechit_detid.content() );
 		lc_converter.setSimClusterConverter(&simclusConv);
 
+		auto good_lc = lc_converter.getUniqueClusters();
 
-
-		for( int lc_idx=0; lc_idx< (int)lc_energy.content()->size(); lc_idx++){
+		for(const auto& lc_idx: good_lc){
 
 		    if(! winEtaPhi.hitIsInWindow(lc_eta.content()->at(lc_idx),lc_phi.content()->at(lc_idx)) )
 		        continue;
